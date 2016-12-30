@@ -275,13 +275,114 @@ public class FairLock {
     
     
     
-    
-    
+    private static class TestRun implements Runnable {
+        final FairLock lock;
+        final Condition c1;
+        final Condition c2;
 
+        public TestRun(FairLock lock, Condition c1, Condition c2) {
+            this.lock = lock;
+            this.c1 = c1;
+            this.c2 = c2;
+        }
+        
+        private static int counter = 0;
+        private static String[] nameOrder = new String[3];
+        private static int i = 0;
+        private static String lastName = null;
+        
+        public static void count() {
+            ++counter;
+            lastName = Thread.currentThread().getName();
+        }
+
+        @Override
+        public void run() {
+            try {
+                lock.lock();
+                nameOrder[i++] = Thread.currentThread().getName();
+                
+                for(int i = 0; i < 1000; ++i) {                    
+                    c1.await();
+                    
+                    count();
+                }
+                lock.unlock();
+            } catch(InterruptedException e ) {
+                e.printStackTrace();
+            }
+        }
+        
+    }
+    
+    
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
+        FairLock l = new FairLock();
+        Condition c1 = l.newCondition();
+        Condition c2 = l.newCondition();
+        
+        Runnable body = new TestRun(l, c1, c2);
+        
+        ThreadGroup workers = new ThreadGroup("WORKERS");
+        
+        Thread t1 = new Thread(workers, body);
+        Thread t2 = new Thread(workers, body);
+        Thread t3 = new Thread(workers, body);
+        
+        try {
+        l.lock();
+        
+        t1.start();
+        t2.start();
+        t3.start();
+        
+        l.unlock();
+        synchronized(body) {
+            body.wait(1000);
+        }
+        l.lock();
+
+        
+        while(TestRun.counter != 3000) {
+            if(TestRun.counter % 3 != 0)
+                System.out.println("NUMERIC ERROR!, current value -> " + TestRun.counter);
+            
+            if(TestRun.counter == 3000)
+                break;
+            
+            c1.signal();
+            
+            if(TestRun.lastName != TestRun.nameOrder[0])
+                System.out.println("ORDER ERROR!");
+            
+            c1.signal();
+            
+            if(TestRun.lastName != TestRun.nameOrder[1])
+                System.out.println("ORDER ERROR!");
+            
+            c1.signal();
+            
+            if(TestRun.lastName != TestRun.nameOrder[2])
+                System.out.println("ORDER ERROR!");
+        }
+        
+        System.out.println("Main Thread, final value " + TestRun.counter);
+        
+        l.unlock();
+        
+        t1.join();
+        t2.join();
+        t3.join();
+        
+        } catch(InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        
+                
         
     }
     

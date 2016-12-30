@@ -193,17 +193,6 @@ public class FairLock {
         currentCondition = null;
     }
     
-    // NOTICE: urgentQueue cannot contain something AND state be UNLOCKED at
-    // the same time, never.
-    private synchronized boolean canILock(BinarySemaphore sem) {
-        assert isLocked() || urgentQueue.isEmpty();
-        
-        assert !entryQueue.isEmpty();
-        
-        return isUnlocked() && sem == entryQueue.peek();
-    }
-    
-    
     public synchronized boolean isLocked() {
         return state == LockState.LOCKED;
     }
@@ -212,32 +201,33 @@ public class FairLock {
         return state == LockState.UNLOCKED;
     }
     
-    
-    
-    
     // NOTICE: this method assumes that current Thread DOES NOT own this lock,
     // otherwise it will end up this being a deadlock.
     public void lock() throws InterruptedException {
-        BinarySemaphore semaphore = new BinarySemaphore();
+        BinarySemaphore semaphore;
         
         synchronized(this) {
-            entryQueue.add(semaphore);
-            
-            if(canILock(semaphore)) {
-                entryQueue.remove(semaphore);
+            if(state == LockState.UNLOCKED) {
+                assert entryQueue.isEmpty();
+                assert urgentQueue.isEmpty();
+                
                 state = LockState.LOCKED;
                 return;
             }
+            
+            semaphore = new BinarySemaphore();
+                
+            entryQueue.add(semaphore);
         }
         
         semaphore.await(entryQueue);
         
         synchronized(this) {
-            assert isUnlocked();
+            assert isLocked();
+            assert urgentQueue.isEmpty();
             assert entryQueue.peek() == semaphore;
             
             entryQueue.remove(semaphore);
-            state = LockState.LOCKED;
         }
     }
     
@@ -252,11 +242,12 @@ public class FairLock {
             return;
         }
         
-        state = LockState.UNLOCKED;
-        
         if(!entryQueue.isEmpty()) {
             entryQueue.peek().signal();
+            return;
         }
+        
+        state = LockState.UNLOCKED;
     }
     
     public Condition newCondition() {
@@ -287,7 +278,7 @@ public class FairLock {
         }
         
         private static int counter = 0;
-        private static String[] nameOrder = new String[3];
+        private static final String[] NAMEORDER = new String[3];
         private static int i = 0;
         private static String lastName = null;
         
@@ -300,9 +291,9 @@ public class FairLock {
         public void run() {
             try {
                 lock.lock();
-                nameOrder[i++] = Thread.currentThread().getName();
+                NAMEORDER[i++] = Thread.currentThread().getName();
                 
-                for(int i = 0; i < 1000; ++i) {                    
+                for(int j = 0; j < 1000; ++j) {                    
                     c1.await();
                     
                     count();
@@ -355,17 +346,17 @@ public class FairLock {
             
             c1.signal();
             
-            if(TestRun.lastName != TestRun.nameOrder[0])
+            if(!TestRun.lastName.equals(TestRun.NAMEORDER[0]))
                 System.out.println("ORDER ERROR!");
             
             c1.signal();
             
-            if(TestRun.lastName != TestRun.nameOrder[1])
+            if(!TestRun.lastName.equals(TestRun.NAMEORDER[1]))
                 System.out.println("ORDER ERROR!");
             
             c1.signal();
             
-            if(TestRun.lastName != TestRun.nameOrder[2])
+            if(!TestRun.lastName.equals(TestRun.NAMEORDER[2]))
                 System.out.println("ORDER ERROR!");
         }
         

@@ -19,8 +19,6 @@ public class FairLock {
         LOCKED,
     }
     
-    
-    
     private static class BinarySemaphore {
         private boolean hasSignal;
         private final Thread owner;
@@ -52,9 +50,6 @@ public class FairLock {
             notify();
         }
     }
-    
-    
-    
     
     public class Condition {
         private final Queue<BinarySemaphore> conditionQueue;
@@ -162,32 +157,6 @@ public class FairLock {
         }
         
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
     

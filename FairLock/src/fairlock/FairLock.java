@@ -21,37 +21,20 @@ public class FairLock {
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     private static class BinarySemaphore {
-        boolean hasSignal;
+        private boolean hasSignal;
+        private final Thread owner;
         
-        BinarySemaphore() {
+        public BinarySemaphore() {
             hasSignal = false;
+            owner = Thread.currentThread();
         }
         
-        public synchronized void await(Queue q) throws InterruptedException {
+        public synchronized void await() throws InterruptedException {
             while(!hasSignal) {
                 try {
                     wait();
                 } catch(InterruptedException e) {
-                    if(q != null)
-                        q.remove(this);
                     hasSignal = false;
                     throw e;
                 }
@@ -73,23 +56,6 @@ public class FairLock {
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     public class Condition {
         private final Queue<BinarySemaphore> conditionQueue;
         
@@ -106,7 +72,35 @@ public class FairLock {
             
             FairLock.this.unlock();
             
-            semaphore.await(conditionQueue);
+            try {
+                semaphore.await();
+            } catch(InterruptedException e) {
+                
+                // TODO: CLEANUP
+                // Check if the current thread is the expected-to-be owner
+                // of the lock, if so unlock the lock.
+                synchronized(FairLock.this) {
+                    synchronized(this) {
+                        conditionQueue.remove(semaphore);
+                        
+                        // TODO: If I wanted someone from this condition to wake
+                        // up I should wakeup another thread from the same
+                        // condition if present, otherwise release the lock
+                        // via unlock.
+                        
+                        if(FairLock.this.owner == Thread.currentThread()) {
+                            if(!conditionQueue.isEmpty()) {
+                                FairLock.this.owner = conditionQueue.peek().owner;
+                                conditionQueue.peek().signal();
+                            } else {
+                                FairLock.this.unlock();
+                            }
+                        }
+                    }   
+                }
+                
+                throw e;
+            }
             
             synchronized(this) {
                 assert conditionQueue.peek() == semaphore;
@@ -134,12 +128,30 @@ public class FairLock {
             synchronized(FairLock.this) {
                 assert isLocked();
                 
+                owner = awakeningSemaphore.owner;
+                
                 urgentQueue.add(semaphore);
             }
             
             awakeningSemaphore.signal();
             
-            semaphore.await(urgentQueue);
+            try {
+                semaphore.await();
+            } catch(InterruptedException e) {
+                
+                // TODO: CLEANUP
+                // Check if the current thread is the expected-to-be owner
+                // of the lock, if so unlock the lock.
+                synchronized(FairLock.this) {
+                    synchronized(this) {
+                        urgentQueue.remove(semaphore);
+                        
+                        FairLock.this.unlockIfOwner();
+                    }   
+                }
+                
+                throw e;
+            }
             
             synchronized(FairLock.this) {
                 assert isLocked();
@@ -185,12 +197,15 @@ public class FairLock {
     
     LockState state;
     Condition currentCondition;
+    Thread owner;
         
     public FairLock() {
         entryQueue = new LinkedList<>();
         urgentQueue = new LinkedList<>();
         state = LockState.UNLOCKED;
         currentCondition = null;
+        
+        owner = null;
     }
     
     public synchronized boolean isLocked() {
@@ -207,11 +222,12 @@ public class FairLock {
         BinarySemaphore semaphore;
         
         synchronized(this) {
-            if(state == LockState.UNLOCKED) {
+            if(isUnlocked()) {
                 assert entryQueue.isEmpty();
                 assert urgentQueue.isEmpty();
                 
                 state = LockState.LOCKED;
+                owner = Thread.currentThread();
                 return;
             }
             
@@ -220,7 +236,21 @@ public class FairLock {
             entryQueue.add(semaphore);
         }
         
-        semaphore.await(entryQueue);
+        try {
+            semaphore.await();
+        } catch(InterruptedException e) {
+
+            // TODO: CLEANUP
+            // Check if the current thread is the expected-to-be owner
+            // of the lock, if so unlock the lock.
+            synchronized(this) {
+                entryQueue.remove(semaphore);
+
+                unlockIfOwner();
+            }
+
+            throw e;
+        }
         
         synchronized(this) {
             assert isLocked();
@@ -231,6 +261,12 @@ public class FairLock {
         }
     }
     
+    protected synchronized void unlockIfOwner() {
+        if(owner == Thread.currentThread())
+            unlock();
+            
+    }
+    
     // NOTICE: this method assumes that current Thread owns this lock, otherwise
     // it has an unpredictable behaviour.
     public synchronized void unlock() {
@@ -238,11 +274,13 @@ public class FairLock {
         assert isLocked();
         
         if(!urgentQueue.isEmpty()) {
+            owner = urgentQueue.peek().owner;
             urgentQueue.peek().signal();
             return;
         }
         
         if(!entryQueue.isEmpty()) {
+            owner = entryQueue.peek().owner;
             entryQueue.peek().signal();
             return;
         }

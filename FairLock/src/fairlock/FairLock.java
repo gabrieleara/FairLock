@@ -14,12 +14,9 @@ import java.util.Queue;
  */
 public class FairLock {
     
-    // TODO: with a real semaphore, I don't even need states for WAITING_ETC.
     private enum LockState {
         UNLOCKED,
         LOCKED,
-        /*WAITING_URGENT_AWAKENING,
-        WAITING_CONDITION_AWAKENING,*/
     }
     
     
@@ -100,19 +97,6 @@ public class FairLock {
             conditionQueue = new LinkedList<>();
         }
         
-        // NOTICE: conditionQueue can't be empty
-        /*
-        private boolean checkConditionContinue(BinarySemaphore sem) {
-            synchronized(FairLock.this) {
-                synchronized(this) {
-                    assert !conditionQueue.isEmpty();
-                    
-                    return sem == conditionQueue.peek() && state == LockState.WAITING_CONDITION_AWAKENING && currentCondition == this;
-                }
-            }
-        }
-        */
-        
         public void await() throws InterruptedException {
             BinarySemaphore semaphore = new BinarySemaphore();
             
@@ -122,24 +106,13 @@ public class FairLock {
             
             FairLock.this.unlock();
             
-            /*if(!checkConditionContinue(semaphore)) {*/
             semaphore.await(conditionQueue);
-            /*}*/
             
             synchronized(this) {
                 assert conditionQueue.peek() == semaphore;
+                
                 conditionQueue.remove(semaphore);
             }
-                
-            /*
-            synchronized(FairLock.this) {
-                synchronized(this) {
-                    conditionQueue.remove(semaphore);
-                    //state = LockState.LOCKED;
-                    //currentCondition = null;
-                }
-            }
-            */
         }
         
         /*
@@ -149,48 +122,30 @@ public class FairLock {
         public void signal() throws InterruptedException {
             BinarySemaphore semaphore = new BinarySemaphore();
             
-            /* Ticket del thread da risvegliare */
-            BinarySemaphore awSemaphore = null;
+            BinarySemaphore awakeningSemaphore;
             
             synchronized(this) {
-                /* Se non ci sono thread bloccati sulla condition, la signal
-                    non ha effetto.
-                */
                 if(conditionQueue.isEmpty())
                     return;
                 
-                awSemaphore = conditionQueue.peek();
+                awakeningSemaphore = conditionQueue.peek();
             }
             
-            /* Aggiunge il thread corrente alla urgent queue.
-                Segnala inoltre che il (primo) processo bloccato sulla
-                condition deve essere risvegliato.
-            */
             synchronized(FairLock.this) {
+                assert isLocked();
+                
                 urgentQueue.add(semaphore);
-                // state = LockState.WAITING_CONDITION_AWAKENING;
-                // currentCondition = this;
             }
             
-            /* Segnala al thread bloccato di proseguire.
-            */
-            awSemaphore.signal();
-            
-            // boolean canIContinue;
+            awakeningSemaphore.signal();
             
             semaphore.await(urgentQueue);
             
-            /*canIContinue = checkUrgentContinue(semaphore);
-            
-            while (!canIContinue){
-                semaphore.await(urgentQueue);
-                
-                canIContinue = checkUrgentContinue(semaphore);
-            }*/
-            
             synchronized(FairLock.this) {
+                assert isLocked();
+                assert urgentQueue.peek() == semaphore;
+                
                 urgentQueue.remove(semaphore);
-                //state = LockState.LOCKED;
             }
         }
         
@@ -239,21 +194,23 @@ public class FairLock {
     }
     
     // NOTICE: urgentQueue cannot contain something AND state be UNLOCKED at
-    // the same time, never
-    private synchronized boolean checkEntryContinue(BinarySemaphore sem) {
-        assert (state == LockState.UNLOCKED && urgentQueue.isEmpty())
-                || state != LockState.UNLOCKED;
+    // the same time, never.
+    private synchronized boolean canILock(BinarySemaphore sem) {
+        assert isLocked() || urgentQueue.isEmpty();
         
         assert !entryQueue.isEmpty();
         
-        return state == LockState.UNLOCKED && sem == entryQueue.peek(); /* && urgentQueue.isEmpty() */
+        return isUnlocked() && sem == entryQueue.peek();
     }
     
-    /*private synchronized boolean checkUrgentContinue(BinarySemaphore sem) {
-        assert !urgentQueue.isEmpty();
-        
-        return state == LockState.WAITING_URGENT_AWAKENING && urgentQueue.peek() == sem;
-    }*/
+    
+    public synchronized boolean isLocked() {
+        return state == LockState.LOCKED;
+    }
+    
+    public synchronized boolean isUnlocked() {
+        return state == LockState.UNLOCKED;
+    }
     
     
     
@@ -266,7 +223,7 @@ public class FairLock {
         synchronized(this) {
             entryQueue.add(semaphore);
             
-            if(checkEntryContinue(semaphore)) {
+            if(canILock(semaphore)) {
                 entryQueue.remove(semaphore);
                 state = LockState.LOCKED;
                 return;
@@ -276,8 +233,8 @@ public class FairLock {
         semaphore.await(entryQueue);
         
         synchronized(this) {
+            assert isUnlocked();
             assert entryQueue.peek() == semaphore;
-            assert state == LockState.UNLOCKED;
             
             entryQueue.remove(semaphore);
             state = LockState.LOCKED;
@@ -288,10 +245,9 @@ public class FairLock {
     // it has an unpredictable behaviour.
     public synchronized void unlock() {
         /* NOTICE: this check isn't enought of course. */
-        assert state == LockState.LOCKED;
+        assert isLocked();
         
         if(!urgentQueue.isEmpty()) {
-            //state = LockState.WAITING_URGENT_AWAKENING;
             urgentQueue.peek().signal();
             return;
         }
@@ -326,7 +282,7 @@ public class FairLock {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        // TODO code application logic here
+        
     }
     
 }

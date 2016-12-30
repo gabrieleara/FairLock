@@ -5,18 +5,21 @@
  */
 package fairlock;
 
-import java.util.PriorityQueue;
+import java.util.LinkedList;
+import java.util.Queue;
 
 /**
  *
  * @author Gabriele
  */
 public class FairLock {
+    
+    // TODO: with a real semaphore, I don't even need states for WAITING_ETC.
     private enum LockState {
         UNLOCKED,
         LOCKED,
-        WAITING_URGENT_AWAKENING,
-        WAITING_CONDITION_AWAKENING,
+        /*WAITING_URGENT_AWAKENING,
+        WAITING_CONDITION_AWAKENING,*/
     }
     
     
@@ -38,40 +41,33 @@ public class FairLock {
     
     
     
-    /* @TODO: probably, this class should be enough to check if the condition
-        is true, i.e. I don't even need the while in the waits!
-    */
-    private static class BinaryPrivateSemaphore implements Comparable<BinaryPrivateSemaphore>{
-        long ticket;
+    private static class BinarySemaphore {
         boolean hasSignal;
         
-        BinaryPrivateSemaphore() {
-            ticket = System.nanoTime();
+        BinarySemaphore() {
             hasSignal = false;
         }
-
-        @Override
-        public int compareTo(BinaryPrivateSemaphore o) {
-            return (ticket < o.ticket) ? -1 : ((ticket == ticket) ? 0 : 1);
-        }
         
-        public synchronized void await(PriorityQueue q) throws InterruptedException {
-            if(hasSignal) {
-                hasSignal = false;
-                return;
+        public synchronized void await(Queue q) throws InterruptedException {
+            while(!hasSignal) {
+                try {
+                    wait();
+                } catch(InterruptedException e) {
+                    if(q != null)
+                        q.remove(this);
+                    hasSignal = false;
+                    throw e;
+                }
             }
             
-            try {
-                wait();
-            } catch(InterruptedException e) {
-                q.remove(this);
-                throw e;
-            } finally {
-                hasSignal = false;
-            }
+            assert hasSignal;
+            
+            hasSignal = false;
         }
         
         public synchronized void signal() {
+            assert !hasSignal;
+            
             hasSignal = true;
             notify();
         }
@@ -98,26 +94,27 @@ public class FairLock {
     
     
     public class Condition {
-        private final PriorityQueue<BinaryPrivateSemaphore> conditionQueue;
+        private final Queue<BinarySemaphore> conditionQueue;
         
         Condition() {
-            conditionQueue = new PriorityQueue<>(0);    
+            conditionQueue = new LinkedList<>();
         }
         
         // NOTICE: conditionQueue can't be empty
-        private boolean checkConditionContinue(BinaryPrivateSemaphore sem) {
+        /*
+        private boolean checkConditionContinue(BinarySemaphore sem) {
             synchronized(FairLock.this) {
                 synchronized(this) {
                     assert !conditionQueue.isEmpty();
                     
-                    return sem == conditionQueue.element() && state == LockState.WAITING_CONDITION_AWAKENING && currentCondition == this;
+                    return sem == conditionQueue.peek() && state == LockState.WAITING_CONDITION_AWAKENING && currentCondition == this;
                 }
             }
         }
+        */
         
         public void await() throws InterruptedException {
-            BinaryPrivateSemaphore semaphore = new BinaryPrivateSemaphore();
-            boolean canIContinue;
+            BinarySemaphore semaphore = new BinarySemaphore();
             
             synchronized(this) {
                 conditionQueue.add(semaphore);
@@ -125,21 +122,24 @@ public class FairLock {
             
             FairLock.this.unlock();
             
-            canIContinue = checkConditionContinue(semaphore);
+            /*if(!checkConditionContinue(semaphore)) {*/
+            semaphore.await(conditionQueue);
+            /*}*/
             
-            while(!canIContinue) {
-                semaphore.await(conditionQueue);
-                
-                canIContinue = checkConditionContinue(semaphore);
+            synchronized(this) {
+                assert conditionQueue.peek() == semaphore;
+                conditionQueue.remove(semaphore);
             }
                 
+            /*
             synchronized(FairLock.this) {
                 synchronized(this) {
                     conditionQueue.remove(semaphore);
-                    state = LockState.LOCKED;
-                    currentCondition = null;
+                    //state = LockState.LOCKED;
+                    //currentCondition = null;
                 }
             }
+            */
         }
         
         /*
@@ -147,10 +147,10 @@ public class FairLock {
         linked FairLock;
         */
         public void signal() throws InterruptedException {
-            BinaryPrivateSemaphore semaphore = new BinaryPrivateSemaphore();
+            BinarySemaphore semaphore = new BinarySemaphore();
             
             /* Ticket del thread da risvegliare */
-            BinaryPrivateSemaphore awTicket = null;
+            BinarySemaphore awSemaphore = null;
             
             synchronized(this) {
                 /* Se non ci sono thread bloccati sulla condition, la signal
@@ -159,7 +159,7 @@ public class FairLock {
                 if(conditionQueue.isEmpty())
                     return;
                 
-                awTicket = conditionQueue.element();
+                awSemaphore = conditionQueue.peek();
             }
             
             /* Aggiunge il thread corrente alla urgent queue.
@@ -168,29 +168,29 @@ public class FairLock {
             */
             synchronized(FairLock.this) {
                 urgentQueue.add(semaphore);
-                state = LockState.WAITING_CONDITION_AWAKENING;
-                currentCondition = this;
+                // state = LockState.WAITING_CONDITION_AWAKENING;
+                // currentCondition = this;
             }
             
             /* Segnala al thread bloccato di proseguire.
             */
-            awTicket.signal();
+            awSemaphore.signal();
             
-            boolean canIContinue;
+            // boolean canIContinue;
             
-            canIContinue = checkUrgentContinue(semaphore);
+            semaphore.await(urgentQueue);
+            
+            /*canIContinue = checkUrgentContinue(semaphore);
             
             while (!canIContinue){
                 semaphore.await(urgentQueue);
                 
                 canIContinue = checkUrgentContinue(semaphore);
-            }
+            }*/
             
             synchronized(FairLock.this) {
-                synchronized(this) {
-                    urgentQueue.remove(semaphore);
-                    state = LockState.LOCKED;
-                }
+                urgentQueue.remove(semaphore);
+                //state = LockState.LOCKED;
             }
         }
         
@@ -225,55 +225,60 @@ public class FairLock {
     
     
     
-    private final PriorityQueue<BinaryPrivateSemaphore> entryQueue;
-    private final PriorityQueue<BinaryPrivateSemaphore> urgentQueue;
+    private final Queue<BinarySemaphore> entryQueue;
+    private final Queue<BinarySemaphore> urgentQueue;
     
     LockState state;
     Condition currentCondition;
         
     public FairLock() {
-        entryQueue = new PriorityQueue<>(0);
-        urgentQueue = new PriorityQueue<>(0);
+        entryQueue = new LinkedList<>();
+        urgentQueue = new LinkedList<>();
         state = LockState.UNLOCKED;
         currentCondition = null;
     }
     
     // NOTICE: urgentQueue cannot contain something AND state be UNLOCKED at
     // the same time, never
-    private synchronized boolean checkEntryContinue(BinaryPrivateSemaphore sem) {
+    private synchronized boolean checkEntryContinue(BinarySemaphore sem) {
         assert (state == LockState.UNLOCKED && urgentQueue.isEmpty())
-                || state != LockState.LOCKED;
+                || state != LockState.UNLOCKED;
         
         assert !entryQueue.isEmpty();
         
-        return state == LockState.UNLOCKED && sem == entryQueue.element(); /* && urgentQueue.isEmpty() */
+        return state == LockState.UNLOCKED && sem == entryQueue.peek(); /* && urgentQueue.isEmpty() */
     }
     
-    private synchronized boolean checkUrgentContinue(BinaryPrivateSemaphore sem) {
+    /*private synchronized boolean checkUrgentContinue(BinarySemaphore sem) {
         assert !urgentQueue.isEmpty();
         
-        return state == LockState.WAITING_URGENT_AWAKENING && urgentQueue.element() == sem;
-    }
+        return state == LockState.WAITING_URGENT_AWAKENING && urgentQueue.peek() == sem;
+    }*/
+    
+    
+    
     
     // NOTICE: this method assumes that current Thread DOES NOT own this lock,
     // otherwise it will end up this being a deadlock.
     public void lock() throws InterruptedException {
-        BinaryPrivateSemaphore semaphore = new BinaryPrivateSemaphore();
-        boolean canIContinue;
+        BinarySemaphore semaphore = new BinarySemaphore();
         
         synchronized(this) {
             entryQueue.add(semaphore);
             
-            canIContinue = checkEntryContinue(semaphore);
+            if(checkEntryContinue(semaphore)) {
+                entryQueue.remove(semaphore);
+                state = LockState.LOCKED;
+                return;
+            }
         }
         
-        while(!canIContinue) {
-            semaphore.await(entryQueue);
-            
-            canIContinue = checkEntryContinue(semaphore);
-        }
+        semaphore.await(entryQueue);
         
         synchronized(this) {
+            assert entryQueue.peek() == semaphore;
+            assert state == LockState.UNLOCKED;
+            
             entryQueue.remove(semaphore);
             state = LockState.LOCKED;
         }
@@ -282,21 +287,24 @@ public class FairLock {
     // NOTICE: this method assumes that current Thread owns this lock, otherwise
     // it has an unpredictable behaviour.
     public synchronized void unlock() {
+        /* NOTICE: this check isn't enought of course. */
+        assert state == LockState.LOCKED;
+        
         if(!urgentQueue.isEmpty()) {
-            state = LockState.WAITING_URGENT_AWAKENING;
-            urgentQueue.element().signal();
+            //state = LockState.WAITING_URGENT_AWAKENING;
+            urgentQueue.peek().signal();
             return;
         }
         
         state = LockState.UNLOCKED;
         
         if(!entryQueue.isEmpty()) {
-            entryQueue.element().signal();
+            entryQueue.peek().signal();
         }
     }
     
     public Condition newCondition() {
-        return new Condition();
+        return this.new Condition();
     }
     
     

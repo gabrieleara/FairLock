@@ -7,7 +7,7 @@ package fairlock;
 
 /**
  *
- * @author Gabriele
+ * @author Gabriele Ara
  */
 public interface SingleResourceManager {
     enum ResourceState {

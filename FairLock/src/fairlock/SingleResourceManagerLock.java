@@ -5,99 +5,125 @@
  */
 package fairlock;
 
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  *
- * @author Gabriele
+ * @author Gabriele Ara
  */
-public class SingleResourceManagerLock {
-    private enum ResourceState {
-        FREE,
-        NON_FREE,
-        WAITING_FOR_A,
-        WAITING_FOR_B
-    }
-    
-    
+public class SingleResourceManagerLock implements SingleResourceManager {
     private final Lock lock;
     private final Condition conditionA;
     private final Condition conditionB;
     
     private ResourceState state;
     
-    private int countA;
-    private int countB;
+    //private int countA;
+    //private int countB;
+    
+    private class MutableBoolean {
+        boolean b;
+        MutableBoolean(boolean b) {
+            this.b = b;
+        }
+        
+        boolean test() {
+            return b;
+        }
+        
+        void set() {
+            b = true;
+        }
+        
+        void reset() {
+            b = false;
+        }
+    }
+    
+    private final Queue<MutableBoolean> conditionAQueue;
+    private final Queue<MutableBoolean> conditionBQueue;
     
     public SingleResourceManagerLock() {
         lock = new ReentrantLock(true);
         conditionA = lock.newCondition();
         conditionB = lock.newCondition();
         state = ResourceState.FREE;
-        countA = 0;
-        countB = 0;
+        
+        conditionAQueue = new LinkedList<>();
+        conditionBQueue = new LinkedList<>();
     }
     
-    private boolean isFree() {
-        return state == ResourceState.FREE;
-    }
-    
-    // true => A
-    public void request(boolean type) throws InterruptedException {
+    @Override
+    public ResourceState getState() {
         try {
             lock.lock();
-            
-            if(isFree()) {
-                state = ResourceState.NON_FREE;
-                return;
-            }
-            
-            // States WAITING_FOR_A and WAITING_FOR_B
-            // prevent both that a Thread another than
-            // the one in the condition variable can acquire
-            // the resource, forcing it to enter the condition
-            // variable.
-
-            if(type) {
-                
-                // Loop prevents spurious wakeups
-                do {
-                    ++countA;
-                    conditionA.await();
-                    --countA;
-                } while(state != ResourceState.WAITING_FOR_A);
-            } else {
-                do {
-                    ++countB;
-                    conditionB.await();
-                    --countB;
-                } while(state != ResourceState.WAITING_FOR_B);
-            }
-            
-            state = ResourceState.NON_FREE;
+            return state;
         } finally {
-            // TODO: check if THIS thread holds the lock, how can I do this?
             lock.unlock();
         }
     }
     
-    public void release() throws InterruptedException {
+    @Override
+    public boolean isFree() {
+        return getState() == ResourceState.FREE;
+    }
+    
+    private void enqueue(Condition c, Queue<MutableBoolean> q) {
+        MutableBoolean canIGo = new MutableBoolean(false);
+        
+        do {
+            q.add(canIGo);
+
+            try { c.await(); } catch (InterruptedException ex) { }
+
+        } while(q.peek() != canIGo && !canIGo.test());
+
+        q.remove(canIGo);
+    }
+    
+    @Override
+    public void request(PriorityClass prio) {
         try {
             lock.lock();
-
-            if(countB > 0) {
-                state = ResourceState.WAITING_FOR_B;
+            
+            if(state == ResourceState.FREE)
+                return;
+            
+            switch(prio) {
+                case TYPE_A:
+                    enqueue(conditionA, conditionAQueue);
+                case TYPE_B:
+                    enqueue(conditionB, conditionBQueue);
+            }
+        } finally {
+            // @TODO: REMOVE state = ResourceState.BUSY;
+            lock.unlock();
+        }
+    }
+    
+    @Override
+    public void release() {
+        try {
+            lock.lock();
+            
+            if(conditionBQueue.size() > 0) {
+                // @TODO: REMOVE state = ResourceState.WAITING_FOR_B;
+                conditionBQueue.peek().set();
                 conditionB.signal();
-            } else if(countA > 0) {
-                state = ResourceState.WAITING_FOR_A;
+                
+            } else if(conditionAQueue.size() > 0) {
+                // @TODO: REMOVE state = ResourceState.WAITING_FOR_A;
+                conditionAQueue.peek().set();
                 conditionA.signal();
+                
             } else
                 state = ResourceState.FREE;
             
         } finally {
-            // TODO: check if THIS thread holds the lock, how can I do this?
             lock.unlock();
         }
     }

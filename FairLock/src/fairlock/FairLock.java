@@ -10,56 +10,68 @@ import java.util.Queue;
 
 /**
  *
- * @author Gabriele
+ * @author Gabriele Ara
  */
 public class FairLock {
-    
-    private enum LockState {
+    protected enum LockState {
         UNLOCKED,
         LOCKED,
     }
     
-    private static class BinarySemaphore {
+    protected static class SimpleEventSemaphore {
         private boolean hasSignal;
         private final Thread owner;
         
-        public BinarySemaphore() {
+        public SimpleEventSemaphore() {
             hasSignal = false;
             owner = Thread.currentThread();
         }
         
-        public synchronized void await() throws InterruptedException {
+        protected Thread getOwner() {
+            return owner;
+        }
+        
+        public synchronized void await() {
             while(!hasSignal) {
-                try {
-                    wait();
-                } catch(InterruptedException e) {
-                    hasSignal = false;
-                    throw e;
-                }
+                try { wait(); } catch(InterruptedException e) { }
             }
             
             assert hasSignal;
-            
             hasSignal = false;
         }
         
         public synchronized void signal() {
-            assert !hasSignal;
-            
             hasSignal = true;
             notify();
         }
     }
     
     public class Condition {
-        private final Queue<BinarySemaphore> conditionQueue;
+        private final Queue<SimpleEventSemaphore> conditionQueue;
         
         Condition() {
             conditionQueue = new LinkedList<>();
         }
         
-        public void await() throws InterruptedException {
-            BinarySemaphore semaphore = new BinarySemaphore();
+        // @TODO: check if I can remove the peek object from the queue before!
+        // @TODO: refactor name
+        public int size() {
+            synchronized(FairLock.this) {
+                synchronized(this) {
+                    if(conditionQueue.size() > 0 && getOwner() == conditionQueue.peek().getOwner())
+                        return conditionQueue.size() - 1;
+                    
+                    return conditionQueue.size();
+                }
+            }
+        }
+        
+        public boolean isEmpty() {
+            return size() == 0;
+        }
+        
+        public void await() {
+            SimpleEventSemaphore semaphore = new SimpleEventSemaphore();
             
             synchronized(this) {
                 conditionQueue.add(semaphore);
@@ -67,38 +79,11 @@ public class FairLock {
             
             FairLock.this.unlock();
             
-            try {
-                semaphore.await();
-            } catch(InterruptedException e) {
-                
-                // TODO: CLEANUP
-                // Check if the current thread is the expected-to-be owner
-                // of the lock, if so unlock the lock.
-                synchronized(FairLock.this) {
-                    synchronized(this) {
-                        conditionQueue.remove(semaphore);
-                        
-                        // TODO: If I wanted someone from this condition to wake
-                        // up I should wakeup another thread from the same
-                        // condition if present, otherwise release the lock
-                        // via unlock.
-                        
-                        if(FairLock.this.owner == Thread.currentThread()) {
-                            if(!conditionQueue.isEmpty()) {
-                                FairLock.this.owner = conditionQueue.peek().owner;
-                                conditionQueue.peek().signal();
-                            } else {
-                                FairLock.this.unlock();
-                            }
-                        }
-                    }   
-                }
-                
-                throw e;
-            }
+            semaphore.await();
             
             synchronized(this) {
                 assert conditionQueue.peek() == semaphore;
+                assert isOwner();
                 
                 conditionQueue.remove(semaphore);
             }
@@ -108,10 +93,13 @@ public class FairLock {
         NOTICE: This method assumes that current thread owns lock on the 
         linked FairLock;
         */
-        public void signal() throws InterruptedException {
-            BinarySemaphore semaphore = new BinarySemaphore();
+        public void signal() {
+            assert isLocked();
+            assert isOwner();
+                    
+            SimpleEventSemaphore semaphore = new SimpleEventSemaphore();
             
-            BinarySemaphore awakeningSemaphore;
+            SimpleEventSemaphore awakeningSemaphore;
             
             synchronized(this) {
                 if(conditionQueue.isEmpty())
@@ -123,34 +111,19 @@ public class FairLock {
             synchronized(FairLock.this) {
                 assert isLocked();
                 
-                owner = awakeningSemaphore.owner;
+                setOwner(awakeningSemaphore.getOwner());
                 
                 urgentQueue.add(semaphore);
             }
             
             awakeningSemaphore.signal();
             
-            try {
-                semaphore.await();
-            } catch(InterruptedException e) {
-                
-                // TODO: CLEANUP
-                // Check if the current thread is the expected-to-be owner
-                // of the lock, if so unlock the lock.
-                synchronized(FairLock.this) {
-                    synchronized(this) {
-                        urgentQueue.remove(semaphore);
-                        
-                        FairLock.this.unlockIfOwner();
-                    }   
-                }
-                
-                throw e;
-            }
+            semaphore.await();
             
             synchronized(FairLock.this) {
                 assert isLocked();
                 assert urgentQueue.peek() == semaphore;
+                assert isOwner();
                 
                 urgentQueue.remove(semaphore);
             }
@@ -161,18 +134,16 @@ public class FairLock {
     
     
     
-    private final Queue<BinarySemaphore> entryQueue;
-    private final Queue<BinarySemaphore> urgentQueue;
+    protected final Queue<SimpleEventSemaphore> entryQueue;
+    protected final Queue<SimpleEventSemaphore> urgentQueue;
     
     LockState state;
-    Condition currentCondition;
     Thread owner;
         
     public FairLock() {
         entryQueue = new LinkedList<>();
         urgentQueue = new LinkedList<>();
         state = LockState.UNLOCKED;
-        currentCondition = null;
         
         owner = null;
     }
@@ -185,75 +156,76 @@ public class FairLock {
         return state == LockState.UNLOCKED;
     }
     
+    protected synchronized Thread getOwner() {
+        return owner;
+    }
+    
+    protected synchronized void setOwner(Thread o) {
+        owner = o;
+    }
+    
+    protected synchronized boolean isOwner() {
+        return owner == Thread.currentThread();
+    }
+    
     // NOTICE: this method assumes that current Thread DOES NOT own this lock,
     // otherwise it will end up this being a deadlock.
-    public void lock() throws InterruptedException {
-        BinarySemaphore semaphore;
+    public void lock() {
+        SimpleEventSemaphore semaphore;
         
         synchronized(this) {
+            assert !isOwner();
+            
             if(isUnlocked()) {
                 assert entryQueue.isEmpty();
                 assert urgentQueue.isEmpty();
                 
                 state = LockState.LOCKED;
-                owner = Thread.currentThread();
+                setOwner(Thread.currentThread());
                 return;
             }
             
-            semaphore = new BinarySemaphore();
+            semaphore = new SimpleEventSemaphore();
                 
             entryQueue.add(semaphore);
         }
         
-        try {
-            semaphore.await();
-        } catch(InterruptedException e) {
-
-            // TODO: CLEANUP
-            // Check if the current thread is the expected-to-be owner
-            // of the lock, if so unlock the lock.
-            synchronized(this) {
-                entryQueue.remove(semaphore);
-
-                unlockIfOwner();
-            }
-
-            throw e;
-        }
+        semaphore.await();
         
         synchronized(this) {
             assert isLocked();
             assert urgentQueue.isEmpty();
             assert entryQueue.peek() == semaphore;
+            assert isOwner();
             
             entryQueue.remove(semaphore);
         }
     }
     
     protected synchronized void unlockIfOwner() {
-        if(owner == Thread.currentThread())
+        if(isOwner())
             unlock();
-            
     }
     
     // NOTICE: this method assumes that current Thread owns this lock, otherwise
     // it has an unpredictable behaviour.
     public synchronized void unlock() {
-        /* NOTICE: this check isn't enought of course. */
         assert isLocked();
+        assert isOwner();
         
         if(!urgentQueue.isEmpty()) {
-            owner = urgentQueue.peek().owner;
+            setOwner(urgentQueue.peek().getOwner());
             urgentQueue.peek().signal();
             return;
         }
         
         if(!entryQueue.isEmpty()) {
-            owner = entryQueue.peek().owner;
+            setOwner(entryQueue.peek().getOwner());
             entryQueue.peek().signal();
             return;
         }
         
+        setOwner(null);
         state = LockState.UNLOCKED;
     }
     
@@ -273,7 +245,7 @@ public class FairLock {
     
     
     
-    private static class TestRun implements Runnable {
+    /*private static class TestRun implements Runnable {
         final FairLock lock;
         final Condition c1;
         final Condition c2;
@@ -296,28 +268,23 @@ public class FairLock {
 
         @Override
         public void run() {
-            try {
-                lock.lock();
-                NAMEORDER[i++] = Thread.currentThread().getName();
+            lock.lock();
+            NAMEORDER[i++] = Thread.currentThread().getName();
+            for(int j = 0; j < 1000; ++j) {
+                c1.await();
                 
-                for(int j = 0; j < 1000; ++j) {                    
-                    c1.await();
-                    
-                    count();
-                }
-                lock.unlock();
-            } catch(InterruptedException e ) {
-                e.printStackTrace();
+                count();
             }
+            lock.unlock();
         }
         
-    }
+    }*/
     
     
     /**
      * @param args the command line arguments
      */
-    public static void main(String[] args) {
+    /*public static void main(String[] args) {
         FairLock l = new FairLock();
         Condition c1 = l.newCondition();
         Condition c2 = l.newCondition();
@@ -382,6 +349,6 @@ public class FairLock {
         
                 
         
-    }
+    }*/
     
 }

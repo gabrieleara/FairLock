@@ -9,73 +9,26 @@ package fairlock;
  *
  * @author Gabriele
  */
-public class SingleResourceManager {
-    private enum ResourceState {
+public interface SingleResourceManager {
+    enum ResourceState {
         FREE,
-        NON_FREE,
+        BUSY,
+        // @NOTICE: the following states are completely optional
+        //WAITING_FOR_A,
+        //WAITING_FOR_B,
     }
     
-    private final FairLock lock;
-    private final FairLock.Condition conditionA;
-    private final FairLock.Condition conditionB;
-    
-    private ResourceState state;
-    
-    private int countA;
-    private int countB;
-    
-    public SingleResourceManager() {
-        lock = new FairLock();
-        conditionA = lock.newCondition();
-        conditionB = lock.newCondition();
-        state = ResourceState.FREE;
-        countA = 0;
-        countB = 0;
+    enum PriorityClass {
+        TYPE_A,
+        TYPE_B,
     }
     
-    private boolean isFree() {
-        return state == ResourceState.FREE;
-    }
+    ResourceState getState();
     
-    // true => A
-    public void request(boolean type) throws InterruptedException {
-        lock.lock();
-        
-        if(isFree()) {
-            state = ResourceState.NON_FREE;
-            lock.unlock();
-            return;
-        }
-        
-        if(type) {
-            ++countA;
-            try {
-                conditionA.await();
-            } finally {
-                --countA;
-            }
-        } else {
-            ++countB;
-            try {
-                conditionB.await();
-            } finally {
-                --countB;
-            }
-        }
-        
-        lock.unlock();
-    }
+    boolean isFree();
     
-    public void release() throws InterruptedException {
-        lock.lock();
-        
-        if(countB > 0)
-            conditionB.signal();
-        else if(countA > 0)
-            conditionA.signal();
-        else
-            state = ResourceState.FREE;
-        
-        lock.unlock();
-    }
+    void request(PriorityClass prio);
+    
+    void release();
+    
 }

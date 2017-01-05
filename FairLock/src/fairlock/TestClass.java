@@ -100,6 +100,7 @@ public class TestClass {
     
     private static final String PATTERN_A = "^\\s*[Aa]\\s*$";
     private static final String PATTERN_B = "^\\s*[Bb]\\s*$";
+    private static final String PATTERN_C = "^\\s*[Cc]\\s*$";
     private static final String PATTERN_Y = "^\\s*[Yy]\\s*$";
     
     private static void printTrace() {
@@ -223,6 +224,115 @@ public class TestClass {
             
     }
     
+    private static void testNoFair(SingleResourceManager manager) {
+        OPERATIONS.clear();
+        
+        Thread a1 = new ClientThread(PriorityClass.TYPE_A, manager);
+        Thread a2 = new ClientThread(PriorityClass.TYPE_A, manager);
+        Thread b1 = new ClientThread(PriorityClass.TYPE_B, manager);
+        
+        a1.start();
+        a2.start();
+        b1.start();
+        
+        while(a1.isAlive() || a2.isAlive() || b1.isAlive()) {
+            try {    
+                a1.join();
+                a2.join();
+                b1.join();
+            } catch (InterruptedException ex) {
+
+            }
+        }
+        
+        System.out.println("Test finished! Checking if everything is fine...");
+        System.out.println();
+        
+        boolean free = true;
+        boolean used = false;
+        
+        String ownerType = null;
+        int owner = -1;
+        int counterA = 0;
+        int counterB = 0;
+        
+        for(int i = 0; i < OPERATIONS.size(); ++i) {
+            String[] op = OPERATIONS.get(i).split("-");
+            
+            switch(op[2]) {
+                case "Req":
+                    if(free) {
+                        ownerType = op[0];
+                        owner = Integer.parseInt(op[1]);
+                        free = false;
+                        used = false;
+                        continue;
+                    }
+                    
+                    switch(op[0].charAt(0)) {
+                        case 'A':
+                            ++counterA;
+                            break;
+                        case 'B':
+                            ++counterB;
+                            break;
+                    }
+                    break;
+                case "Rel":
+                    if(free || !used || !op[0].equals(ownerType)) {
+                        System.out.println("Property violation! Printing the trace...");
+                        System.out.println();
+                        printTrace(i+1);
+                        return;
+                    }
+                    
+                    if(counterB > 0) {
+                        --counterB;
+                        ownerType = "B";
+                        owner = -1;
+                        used = false;
+                    } else if (counterA > 0) {
+                        --counterA;
+                        ownerType = "A";
+                        owner = -1;
+                        used = false;
+                    } else {
+                        used = false;
+                        free = true;
+                        ownerType = null;
+                    }
+                    break;
+                case "Use":
+                    if(free || used || !ownerType.equals(op[0]) || ( owner > 0 && owner != Integer.parseInt(op[1]))) {
+                        System.out.println("Property violation! Printing the trace...");
+                        System.out.println();
+                        printTrace(i+1);
+                        return;
+                    }
+                    owner = Integer.parseInt(op[1]);
+                    used = true;
+                    
+                    break;
+                default:
+                    System.out.println("Unrecognized operation! Printing the trace...");
+                    System.out.println();
+                    printTrace(i+1);
+                    return;
+            }
+        }
+        
+        System.out.println("Seems everything was fine!");
+        System.out.print("Do you want to print out trace? (Y/n) ");
+        
+        String input = SCANNER.next();
+        
+        if(Pattern.matches(PATTERN_Y, input)) {
+            System.out.println();
+            printTrace();
+        }
+            
+    }
+    
     public static void main(String[] args) {
         String input;
         boolean continue_ = true;
@@ -231,8 +341,9 @@ public class TestClass {
             System.out.println("Select which kind of Manager you want to test:");
             System.out.println("A) The one which uses FairLock to implement the monitor in signal and urgent pattern;");
             System.out.println("B) The one which uses the standard class Lock to implement the monitor in signal and continue pattern.");
+            System.out.println("C) The one derived from the FSM specification, which uses the standard class Lock to implement the monitor in signal and continue pattern.");
 
-            System.out.print("Submit your choice (A/B): ");
+            System.out.print("Submit your choice (A/B/C): ");
 
             input = SCANNER.next();
             
@@ -255,6 +366,17 @@ public class TestClass {
                 System.out.println();
                 
                 test(new SingleResourceManagerLock());
+                
+                System.out.println();
+            } else if (Pattern.matches(PATTERN_C, input)) {
+                clearNetbeansConsole();
+                
+                System.out.println("Starting testing of the manager C...");
+                System.out.println("NOTICE: this manager may suffer from spurious wakeups!");
+                System.out.println("NOTICE: this might take a while...");
+                System.out.println();
+                
+                testNoFair(new SingleResourceManagerFSM());
                 
                 System.out.println();
             } else {

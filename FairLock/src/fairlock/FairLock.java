@@ -65,6 +65,9 @@ public class FairLock {
         // NOTICE: This method assumes that current thread owns lock on the 
         // linked FairLock;
         public void await() {
+            assert isLocked();
+            assert isOwner();
+            
             SimpleEventSemaphore semaphore = new SimpleEventSemaphore();
             
             synchronized(this) {
@@ -75,6 +78,7 @@ public class FairLock {
             
             semaphore.await();
             
+            assert isLocked();
             assert isOwner();
         }
         
@@ -97,8 +101,6 @@ public class FairLock {
             }
             
             synchronized(FairLock.this) {
-                assert isLocked();
-                
                 setOwner(awakeningSemaphore.getOwner());
                 
                 urgentQueue.add(semaphore);
@@ -108,10 +110,8 @@ public class FairLock {
             
             semaphore.await();
             
-            synchronized(FairLock.this) {
-                assert isLocked();
-                assert isOwner();
-            }
+            assert isLocked();
+            assert isOwner();
         }
         
     }
@@ -224,123 +224,5 @@ public class FairLock {
     public Condition newCondition() {
         return this.new Condition();
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    /*private static class TestRun implements Runnable {
-        final FairLock lock;
-        final Condition c1;
-        final Condition c2;
-
-        public TestRun(FairLock lock, Condition c1, Condition c2) {
-            this.lock = lock;
-            this.c1 = c1;
-            this.c2 = c2;
-        }
-        
-        private static int counter = 0;
-        private static final String[] NAMEORDER = new String[3];
-        private static int i = 0;
-        private static String lastName = null;
-        
-        public static void count() {
-            ++counter;
-            lastName = Thread.currentThread().getName();
-        }
-
-        @Override
-        public void run() {
-            lock.lock();
-            NAMEORDER[i++] = Thread.currentThread().getName();
-            for(int j = 0; j < 1000; ++j) {
-                c1.await();
-                
-                count();
-            }
-            lock.unlock();
-        }
-        
-    }*/
-    
-    
-    /**
-     * @param args the command line arguments
-     */
-    /*public static void main(String[] args) {
-        FairLock l = new FairLock();
-        Condition c1 = l.newCondition();
-        Condition c2 = l.newCondition();
-        
-        Runnable body = new TestRun(l, c1, c2);
-        
-        ThreadGroup workers = new ThreadGroup("WORKERS");
-        
-        Thread t1 = new Thread(workers, body);
-        Thread t2 = new Thread(workers, body);
-        Thread t3 = new Thread(workers, body);
-        
-        try {
-        l.lock();
-        
-        t1.start();
-        t2.start();
-        t3.start();
-        
-        l.unlock();
-        synchronized(body) {
-            body.wait(1000);
-        }
-        l.lock();
-
-        
-        while(TestRun.counter != 3000) {
-            if(TestRun.counter % 3 != 0)
-                System.out.println("NUMERIC ERROR!, current value -> " + TestRun.counter);
-            
-            if(TestRun.counter == 3000)
-                break;
-            
-            c1.signal();
-            
-            if(!TestRun.lastName.equals(TestRun.NAMEORDER[0]))
-                System.out.println("ORDER ERROR!");
-            
-            c1.signal();
-            
-            if(!TestRun.lastName.equals(TestRun.NAMEORDER[1]))
-                System.out.println("ORDER ERROR!");
-            
-            c1.signal();
-            
-            if(!TestRun.lastName.equals(TestRun.NAMEORDER[2]))
-                System.out.println("ORDER ERROR!");
-        }
-        
-        System.out.println("Main Thread, final value " + TestRun.counter);
-        
-        l.unlock();
-        
-        t1.join();
-        t2.join();
-        t3.join();
-        
-        } catch(InterruptedException e) {
-            e.printStackTrace();
-        }
-        
-        
-                
-        
-    }*/
     
 }

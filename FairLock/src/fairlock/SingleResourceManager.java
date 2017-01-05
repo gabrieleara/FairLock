@@ -13,10 +13,6 @@ public interface SingleResourceManager {
     enum ResourceState {
         FREE,
         BUSY,
-        // @NOTICE: the following states are completely optional
-        //WAITING_FOR_A,
-        //WAITING_FOR_B,
-        
     }
     
     enum PriorityClass {

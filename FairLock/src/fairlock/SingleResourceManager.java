@@ -16,11 +16,25 @@ public interface SingleResourceManager {
         // @NOTICE: the following states are completely optional
         //WAITING_FOR_A,
         //WAITING_FOR_B,
+        
     }
     
     enum PriorityClass {
         TYPE_A,
-        TYPE_B,
+        TYPE_B;
+        
+        @Override
+        public String toString() {
+            switch(this) {
+                case TYPE_A:
+                    return "A";
+                case TYPE_B:
+                    return "B";
+                    
+            }
+            
+            return "";
+        }
     }
     
     ResourceState getState();

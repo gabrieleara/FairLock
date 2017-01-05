@@ -53,23 +53,17 @@ public class FairLock {
             conditionQueue = new LinkedList<>();
         }
         
-        // @TODO: check if I can remove the peek object from the queue before!
         // @TODO: refactor name
-        public int size() {
-            synchronized(FairLock.this) {
-                synchronized(this) {
-                    if(conditionQueue.size() > 0 && getOwner() == conditionQueue.peek().getOwner())
-                        return conditionQueue.size() - 1;
-                    
-                    return conditionQueue.size();
-                }
-            }
+        public synchronized int size() {
+            return conditionQueue.size();
         }
         
         public boolean isEmpty() {
             return size() == 0;
         }
         
+        // NOTICE: This method assumes that current thread owns lock on the 
+        // linked FairLock;
         public void await() {
             SimpleEventSemaphore semaphore = new SimpleEventSemaphore();
             
@@ -81,18 +75,12 @@ public class FairLock {
             
             semaphore.await();
             
-            synchronized(this) {
-                assert conditionQueue.peek() == semaphore;
-                assert isOwner();
-                
-                conditionQueue.remove(semaphore);
-            }
+            assert isOwner();
         }
         
-        /*
-        NOTICE: This method assumes that current thread owns lock on the 
-        linked FairLock;
-        */
+        
+        // NOTICE: This method assumes that current thread owns lock on the 
+        // linked FairLock;
         public void signal() {
             assert isLocked();
             assert isOwner();
@@ -105,7 +93,7 @@ public class FairLock {
                 if(conditionQueue.isEmpty())
                     return;
                 
-                awakeningSemaphore = conditionQueue.peek();
+                awakeningSemaphore = conditionQueue.poll();
             }
             
             synchronized(FairLock.this) {
@@ -122,10 +110,7 @@ public class FairLock {
             
             synchronized(FairLock.this) {
                 assert isLocked();
-                assert urgentQueue.peek() == semaphore;
                 assert isOwner();
-                
-                urgentQueue.remove(semaphore);
             }
         }
         
@@ -195,7 +180,6 @@ public class FairLock {
         synchronized(this) {
             assert isLocked();
             assert urgentQueue.isEmpty();
-            assert entryQueue.peek() == semaphore;
             assert isOwner();
             
             entryQueue.remove(semaphore);
@@ -213,15 +197,23 @@ public class FairLock {
         assert isLocked();
         assert isOwner();
         
+        SimpleEventSemaphore awakeningSemaphore;
+        
         if(!urgentQueue.isEmpty()) {
-            setOwner(urgentQueue.peek().getOwner());
-            urgentQueue.peek().signal();
+            awakeningSemaphore = urgentQueue.poll();
+            
+            setOwner(awakeningSemaphore.getOwner());
+            awakeningSemaphore.signal();
+            
             return;
         }
         
         if(!entryQueue.isEmpty()) {
-            setOwner(entryQueue.peek().getOwner());
-            entryQueue.peek().signal();
+            awakeningSemaphore = entryQueue.poll();
+            
+            setOwner(awakeningSemaphore.getOwner());
+            awakeningSemaphore.signal();
+            
             return;
         }
         

@@ -22,30 +22,10 @@ public class SingleResourceManagerLock implements SingleResourceManager {
     
     private ResourceState state;
     
-    //private int countA;
-    //private int countB;
+    private Thread owner;
     
-    private class MutableBoolean {
-        boolean b;
-        MutableBoolean(boolean b) {
-            this.b = b;
-        }
-        
-        boolean test() {
-            return b;
-        }
-        
-        void set() {
-            b = true;
-        }
-        
-        void reset() {
-            b = false;
-        }
-    }
-    
-    private final Queue<MutableBoolean> conditionAQueue;
-    private final Queue<MutableBoolean> conditionBQueue;
+    private final Queue<Thread> conditionAQueue;
+    private final Queue<Thread> conditionBQueue;
     
     public SingleResourceManagerLock() {
         lock = new ReentrantLock(true);
@@ -72,17 +52,12 @@ public class SingleResourceManagerLock implements SingleResourceManager {
         return getState() == ResourceState.FREE;
     }
     
-    private void enqueue(Condition c, Queue<MutableBoolean> q) {
-        MutableBoolean canIGo = new MutableBoolean(false);
+    private void enqueue(Condition c, Queue<Thread> q) {
+        q.add(Thread.currentThread());
         
         do {
-            q.add(canIGo);
-
             try { c.await(); } catch (InterruptedException ex) { }
-
-        } while(q.peek() != canIGo || !canIGo.test());
-
-        q.remove(canIGo);
+        } while(owner != Thread.currentThread());
     }
     
     @Override
@@ -92,6 +67,7 @@ public class SingleResourceManagerLock implements SingleResourceManager {
             
             if(state == ResourceState.FREE) {
                 state = ResourceState.BUSY;
+                owner = Thread.currentThread();
                 return;
             }
             
@@ -104,7 +80,6 @@ public class SingleResourceManagerLock implements SingleResourceManager {
                     break;
             }
         } finally {
-            // @TODO: REMOVE state = ResourceState.BUSY;
             lock.unlock();
         }
     }
@@ -115,17 +90,15 @@ public class SingleResourceManagerLock implements SingleResourceManager {
             lock.lock();
             
             if(conditionBQueue.size() > 0) {
-                // @TODO: REMOVE state = ResourceState.WAITING_FOR_B;
-                conditionBQueue.peek().set();
+                owner = conditionBQueue.poll();
                 conditionB.signal();
-                
             } else if(conditionAQueue.size() > 0) {
-                // @TODO: REMOVE state = ResourceState.WAITING_FOR_A;
-                conditionAQueue.peek().set();
+                owner = conditionAQueue.poll();
                 conditionA.signal();
-                
-            } else
+            } else {
+                owner = null;
                 state = ResourceState.FREE;
+            }
             
         } finally {
             lock.unlock();

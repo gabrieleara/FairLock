@@ -80,7 +80,7 @@ public class SingleResourceManagerLock implements SingleResourceManager {
 
             try { c.await(); } catch (InterruptedException ex) { }
 
-        } while(q.peek() != canIGo && !canIGo.test());
+        } while(q.peek() != canIGo || !canIGo.test());
 
         q.remove(canIGo);
     }
@@ -90,14 +90,18 @@ public class SingleResourceManagerLock implements SingleResourceManager {
         try {
             lock.lock();
             
-            if(state == ResourceState.FREE)
+            if(state == ResourceState.FREE) {
+                state = ResourceState.BUSY;
                 return;
+            }
             
             switch(prio) {
                 case TYPE_A:
                     enqueue(conditionA, conditionAQueue);
+                    break;
                 case TYPE_B:
                     enqueue(conditionB, conditionBQueue);
+                    break;
             }
         } finally {
             // @TODO: REMOVE state = ResourceState.BUSY;

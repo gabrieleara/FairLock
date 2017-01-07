@@ -77,7 +77,6 @@ public class FairLock {
                 try { wait(); } catch(InterruptedException e) { }
             }
             
-            assert hasSignal;
             hasSignal = false;
         }
         
@@ -133,7 +132,7 @@ public class FairLock {
         }
         
         /**
-         * Checks wether there are threads waiting in the <i>condition queue<i>
+         * Checks wether there are threads waiting in the <i>condition queue</i>
          * or not.
          * 
          * @return true if there are threads waiting, false otherwise
@@ -144,24 +143,30 @@ public class FairLock {
         
         /**
          * Adds the current thread in the <i>condition queue</i> of this
-         * Condition object and then releases the lock on the linked
+         * Condition object and then releases the lock on the bounded
          * {@link FairLock}.
          * 
-         * <p>Notice that this method assumes that current thread owns lock on
-         * the linked {@link FairLock}.</p>
+         * <p>If the current thread doesn't hold the lock on the bounded
+         * {@link FairLock} then {@link IllegalMonitorStateException} is thrown.
+         * </p>
          * 
          * <p>When this method terminates its execution, it is ensured that the
          * given condition variable has been signaled by another thread and that
-         * the current thread is now the owner of the linked {@link FairLock}.
+         * the current thread is now the owner of the bounded {@link FairLock}.
          * </p>
          * 
          * <p>Differently from the
          * {@link java.util.concurrent.locks.Condition Condition} implementation
          * provided by the Java API, spurious wakeups cannot happen.</p>
+         * 
+         * @throws IllegalMonitorStateException if the current thread does not
+         * hold the bounded lock
          */
         public void await() {
-            assert isLocked();
-            assert isOwner();
+            synchronized(FairLock.this) {
+                if(!isLocked() || !isOwner())
+                    throw new IllegalMonitorStateException("You can't execute an await on a condition if you don't hold the bounded lock!");
+            }
             
             PrivateEventSemaphore semaphore = new PrivateEventSemaphore();
             
@@ -172,9 +177,6 @@ public class FairLock {
             FairLock.this.unlock();
             
             semaphore.await();
-            
-            assert isLocked();
-            assert isOwner();
         }
         
         
@@ -182,20 +184,28 @@ public class FairLock {
          * If there is at least one thread waiting in the <i>condition queue</i>
          * of this Condition object, the first one is awakened and this thread
          * suspends itself waiting for the lock to be released in the <i>urgent
-         * queue</i> of the linked {@link FairLock}.
+         * queue</i> of the bounded {@link FairLock}.
          * 
          * <p>If the <i>condition queue</i> is empty, the call of this method is
          * equivalent to a no operation.</p>
          * 
-         * <p>Notice that this method assumes that current thread owns lock on
-         * the linked {@link FairLock}. The lock will be given to the awakened
-         * thread (if any); if there is no thread to awake the lock will be
-         * maintained by the current thread (i.e. this call will result in a
+         * <p>If the current thread doesn't hold the lock on the bounded
+         * {@link FairLock} then {@link IllegalMonitorStateException} is thrown.
+         * </p>
+         * 
+         * <p>If the <i>condition queue</i> is not empty, the lock will be given
+         * to the awakened thread; if there is no thread to awake the lock will
+         * be maintained by the current thread (i.e. this call will result in a
          * no operation).</p>
+         * 
+         * @throws IllegalMonitorStateException if the current thread does not
+         * hold the bounded lock
          */
-        public void signal() {
-            assert isLocked();
-            assert isOwner();
+        public void signal() throws IllegalMonitorStateException {
+            synchronized(FairLock.this) {
+                if(!isLocked() || !isOwner())
+                    throw new IllegalMonitorStateException("You can't execute a signal on a condition if you don't hold the bounded lock!");
+            }
                     
             PrivateEventSemaphore semaphore = new PrivateEventSemaphore();
             
@@ -217,15 +227,9 @@ public class FairLock {
             awakeningSemaphore.signal();
             
             semaphore.await();
-            
-            assert isLocked();
-            assert isOwner();
         }
         
     }
-    
-    
-    
     
     protected final Queue<PrivateEventSemaphore> entryQueue;
     protected final Queue<PrivateEventSemaphore> urgentQueue;
@@ -264,7 +268,7 @@ public class FairLock {
      * Returns the owner of the lock, if any.
      * This method may be useful when extending this class.
      * 
-     * @return The thread owner of this lock, or null if the lock is unlocked
+     * @return The thread that holds this lock, or null if the lock is unlocked
      */
     protected synchronized Thread getOwner() {
         return owner;
@@ -275,7 +279,7 @@ public class FairLock {
      * This method may be useful when extending this class.
      * Be careful when calling this method.
      * 
-     * @param owner the new owner of this lock.
+     * @param owner the new owner for this lock.
      */
     protected synchronized void setOwner(Thread owner) {
         this.owner = owner;
@@ -300,22 +304,21 @@ public class FairLock {
      * <p>When this method terminates its execution, the current thread is
      * guaranteed to be the owner of this lock.</p>
      * 
-     * <p>Notice that at the beginning of this call the current thread MUST NOT
-     * own this lock. Calling this method with asserts disabled from the owner
-     * thread of the lock will lead the system to a deadlock, because the
-     * current thread will be suspended in the <i>entry queue</i> while still
-     * holding the lock.</p>
+     * <p>If the current thread already holds the lock then
+     * {@link IllegalMonitorStateException} is thrown.
+     * </p>
+     * 
+     * @throws IllegalMonitorStateException if the current thread already holds
+     * this lock
      */
     public void lock() {
         PrivateEventSemaphore semaphore;
         
         synchronized(this) {
-            assert !isOwner();
+            if(isOwner())
+                throw new IllegalMonitorStateException("You can't acquire more than once a FairLock! Consider moving to a ReentrantLock.");
             
             if(isUnlocked()) {
-                assert entryQueue.isEmpty();
-                assert urgentQueue.isEmpty();
-                
                 state = LockState.LOCKED;
                 setOwner(Thread.currentThread());
                 return;
@@ -327,11 +330,6 @@ public class FairLock {
         }
         
         semaphore.await();
-        
-        synchronized(this) {
-            assert isLocked();
-            assert isOwner();
-        }
     }
     
     /**
@@ -350,13 +348,16 @@ public class FairLock {
      * in the <i>entry queue</i>, the lock will be set as free.</li>
      * </ul>
      * 
-     * <p>Notice that at the beginning of this call the current thread MUST own
-     * this lock. Calling this method with asserts disabled from a thread that
-     * doesn't own the lock will bring the system in a non consistent state.</p>
+     * <p>If the current thread doesn't hold the lock then
+     * {@link IllegalMonitorStateException} is thrown.
+     * </p>
+     * 
+     * @throws IllegalMonitorStateException if the current thread does not hold
+     * this lock
      */
     public synchronized void unlock() {
-        assert isLocked();
-        assert isOwner();
+        if(!isLocked() || !isOwner())
+            throw new IllegalMonitorStateException("You can't release a lock that you don't hold!");
         
         PrivateEventSemaphore awakeningSemaphore;
         

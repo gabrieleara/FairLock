@@ -105,7 +105,7 @@ public class FairLock {
      * suspended until the execution of a {@link #signal() signal};</li>
      * 
      * <li>a thread which executes a {@link #signal() signal} is suspended in
-     * a queue different from <i>the entry queue</i> (the <i>urgent queue</i>)
+     * a queue different from the <i>entry queue</i> (the <i>urgent queue</i>)
      * and has a precedence on the acquiring of the lock after an
      * {@link #unlock() unlock} is executed.</li>
      * </ul>
@@ -124,7 +124,6 @@ public class FairLock {
         }
         
         /** 
-         * @todo: refactor name
          * @return The number of threads waiting in the <i>condition queue</i>
          */
         public synchronized int size() {

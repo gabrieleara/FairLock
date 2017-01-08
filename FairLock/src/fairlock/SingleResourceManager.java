@@ -22,21 +22,21 @@ public interface SingleResourceManager {
      * 
      * <p>The resource can be acquired by clients of two types, each of them
      * with a different priotity; in general, clients with a priority equal to
-     * {@link PriorityClass#TYPE_B} have a higher priority than the others.</p>
+     * {@link PriorityClass#PRIO_B} have a higher priority than the others.</p>
      * 
      * @see SingleResourceManager#request(fairlock.SingleResourceManager.PriorityClass) SingleResourceManager.request
      * @see SingleResourceManager#release() SingleResourceManager.release
      */
     enum PriorityClass {
-        TYPE_A,
-        TYPE_B;
+        PRIO_A,
+        PRIO_B;
         
         @Override
         public String toString() {
             switch(this) {
-                case TYPE_A:
+                case PRIO_A:
                     return "A";
-                case TYPE_B:
+                case PRIO_B:
                     return "B";
                     
             }
@@ -49,8 +49,8 @@ public interface SingleResourceManager {
      * 
      * @return the state of the resource protected by this instance of the
      *         manager:
-     *         {@link ResourceState.FREE} if the resource is free,
-     *         {@link ResourceState.BUSY} otherwise
+     *         {@link ResourceState#FREE} if the resource is free,
+     *         {@link ResourceState#BUSY} otherwise
      */
     ResourceState getState();
     
@@ -77,6 +77,9 @@ public interface SingleResourceManager {
      * <p>When this method terminates, the current thread is ensured to have the
      * permission to use the shared resource.</p>
      * 
+     * <p>Notice: some implementations of this interface may throw a (unchecked)
+     * exception in case a thread executes this method in a wrong time.</p>
+     * 
      * @param prio the priority of the client that is requesting the resource
      * 
      * @see release()
@@ -89,12 +92,12 @@ public interface SingleResourceManager {
      * 
      * <ul>
      * <li> if there is at least one client with priority equal to
-     * {@link PriorityClass#TYPE_B} waiting for the resource, one of them will
+     * {@link PriorityClass#PRIO_B} waiting for the resource, one of them will
      * be awakened and it will receive the resource ownership;</li>
      * 
      * <li> if there are no clients with priority equal to
-     * {@link PriorityClass#TYPE_B} waiting for the resource and there is at
-     * least one client with priority equal to {@link PriorityClass#TYPE_A}
+     * {@link PriorityClass#PRIO_B} waiting for the resource and there is at
+     * least one client with priority equal to {@link PriorityClass#PRIO_A}
      * waiting for the resource, one of them will be awakened and it will
      * receive the resource ownership;</li>
      
@@ -105,6 +108,9 @@ public interface SingleResourceManager {
      * <p>It's up to the implementations of this interface to choose between
      * the waiting clients of the same priority class which one has to be
      * awakened.</p>
+     *
+     * <p>Notice: some implementations of this interface may throw a (unchecked)
+     * exception in case a thread executes this method in a wrong time.</p>
      * 
      * @see request(PriorityClass)
      */

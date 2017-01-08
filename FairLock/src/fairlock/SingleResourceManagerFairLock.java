@@ -1,18 +1,16 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package fairlock;
 
 /**
- *
+ * Implementation of the {@link SingleResourceManager} interface which uses the
+ * {@link FairLock} class as synchronization mechanism.
+ * 
+ * <p>As additional policy, this class ensures a total FIFO ordering between
+ * requests (will anyway be given higher priority to requests of threads with
+ * priority equal to {@link PriorityClass#PRIO_B}).</p>
+ * 
  * @author Gabriele Ara
  */
 public class SingleResourceManagerFairLock implements SingleResourceManager {
-
-    
-    
     private final FairLock lock;
     private final FairLock.Condition conditionA;
     private final FairLock.Condition conditionB;
@@ -28,8 +26,8 @@ public class SingleResourceManagerFairLock implements SingleResourceManager {
     
     @Override
     public ResourceState getState() {
+        lock.lock();
         try {
-            lock.lock();
             return state;
         } finally {
             lock.unlock();
@@ -43,19 +41,18 @@ public class SingleResourceManagerFairLock implements SingleResourceManager {
     
     @Override
     public void request(PriorityClass prio) {
+        lock.lock();
         try {
-            lock.lock();
-            
             if(state == ResourceState.FREE) {
                 state = ResourceState.BUSY;
                 return;
             }
             
             switch(prio) {
-                case TYPE_A:
+                case PRIO_A:
                     conditionA.await();
                     break;
-                case TYPE_B:
+                case PRIO_B:
                     conditionB.await();
                     break;
             }
@@ -64,10 +61,15 @@ public class SingleResourceManagerFairLock implements SingleResourceManager {
         }
     }
     
+    /**
+     * @throws IllegalMonitorStateException if the resource was already free
+     */
     @Override
     public void release() {
+        lock.lock();
         try {
-            lock.lock();
+            if(state != ResourceState.BUSY)
+                throw new IllegalMonitorStateException("Resource was already free, cannot execute release operation!");
             
             if(!conditionB.isEmpty())
                 conditionB.signal();

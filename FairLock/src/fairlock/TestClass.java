@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package fairlock;
 
 import fairlock.SingleResourceManager.PriorityClass;
@@ -16,11 +11,18 @@ import java.util.Scanner;
 import java.util.regex.Pattern;
 
 /**
- *
- * @author Gabriele
+ * Class used to test the {@link SingleResourceManager} implemnentations
+ * provided in this package (and the {@link FairLock} class, in the case of the
+ * corresponding Manager.
+ * 
+ * @author Gabriele Ara
  */
 public class TestClass {
     
+    /**
+     * If the main is executed in Netbeans (c) console, this method clears the
+     * screen.
+     */
     private static void clearNetbeansConsole() {
         try {
             Robot pressbot = new Robot();
@@ -43,6 +45,24 @@ public class TestClass {
         }
     }
     
+    /**
+     * Client that "uses" the resource protected by the Manager in its
+     * constructor; there is no actual resource but that's not a problem when
+     * testing the manager.
+     * 
+     * <p>Each ClientThread executes a certain number of request/release in a
+     * loop. Between sequential operations, random delays are added in order to
+     * simulate operations on a real resource.</p>
+     * 
+     * <p>Every operation performed by the client is added to a trace that can
+     * later be analyzed automatically.</p>
+     * 
+     * <p>At the end of the test, the user is asked if he/she wants to print the
+     * trace analyzed or not.</p>
+     * 
+     * @see TestClass#test(fairlock.SingleResourceManager) 
+     * @see TestClass#testNoFair(fairlock.SingleResourceManager) 
+     */
     public static class ClientThread extends Thread {
         private static long seed = System.nanoTime();
         private static int nextId = 1;
@@ -59,12 +79,12 @@ public class TestClass {
             
             generator = new Random(seed);
             
-            seed += 46856; // Result of 5d10 rolls.
+            seed += 46856; // A "random" increment for the seed
         }
         
         @Override
         public void run() {
-            for(int i = 0; i < 100; ++i) {
+            for(int i = 0; i < 1000; ++i) {
                 try {
                     Thread.sleep(generator.nextInt(100));
                 } catch (InterruptedException ex) {
@@ -80,7 +100,7 @@ public class TestClass {
                 OPERATIONS.add(priority.toString() + "-" + id + "-Use");
                 
                 try {
-                    Thread.sleep(generator.nextInt(300));
+                    Thread.sleep(generator.nextInt(200));
                 } catch (InterruptedException ex) {
                     
                 }
@@ -94,6 +114,7 @@ public class TestClass {
         
     }
     
+    // Trace used to analyze the execution of a set of threads
     private static final List<String> OPERATIONS = Collections.synchronizedList(new ArrayList<String>());
     
     private static final Scanner SCANNER = new Scanner(System.in);
@@ -113,12 +134,34 @@ public class TestClass {
         }
     }
     
+    /**
+     * Performs a test on the given manager. To do so, it creates three threads
+     * (two with a priority equal to {@link PriorityClass#PRIO_A} and one with a
+     * priority equal to {@link PriorityClass#PRIO_B}) that execute a certain
+     * amount of operations on the resource.
+     * 
+     * <p>If the set goes in deadlock, the testing program experiences a
+     * deadlock too and trace of operations executed is not printed. To print
+     * operations as soon as they are executed, uncomment the corresponding
+     * lines in {@link ClientThread#run()}.</p>
+     * 
+     * <p>If the three threads terminate each their execution, this method
+     * checks if the produced trace was valid, in terms of monitor consistency
+     * and FIFO ordering. For a test that doesn't take into account FIFO
+     * ordering of requests see
+     * {@link #testNoFair(fairlock.SingleResourceManager) testNoFair}.</p>
+     * 
+     * <p>At the end of the test, the user is asked if he/she wants to print the
+     * trace analyzed or not.</p>
+     * 
+     * @param manager the manager that needs to be tested
+     */
     private static void test(SingleResourceManager manager) {
         OPERATIONS.clear();
         
-        Thread a1 = new ClientThread(PriorityClass.TYPE_A, manager);
-        Thread a2 = new ClientThread(PriorityClass.TYPE_A, manager);
-        Thread b1 = new ClientThread(PriorityClass.TYPE_B, manager);
+        Thread a1 = new ClientThread(PriorityClass.PRIO_A, manager);
+        Thread a2 = new ClientThread(PriorityClass.PRIO_A, manager);
+        Thread b1 = new ClientThread(PriorityClass.PRIO_B, manager);
         
         a1.start();
         a2.start();
@@ -224,12 +267,31 @@ public class TestClass {
             
     }
     
+    /**
+     * Performs a test on the given manager. To do so, it creates three threads
+     * (two with a priority equal to {@link PriorityClass#PRIO_A} and one with a
+     * priority equal to {@link PriorityClass#PRIO_B}) that execute a certain
+     * amount of operations on the resource.
+     * 
+     * <p>If the set goes in deadlock, the testing program experiences a
+     * deadlock too and trace of operations executed is not printed. To print
+     * operations as soon as they are executed, uncomment the corresponding
+     * lines in {@link ClientThread#run()}.</p>
+     * 
+     * <p>If the three threads terminate each their execution, this method
+     * checks if the produced trace was valid, in terms of monitor consistency
+     * only. For a test that takes into account FIFO
+     * ordering of requests too, see
+     * {@link #test(fairlock.SingleResourceManager) test}.</p>
+     * 
+     * @param manager the manager that needs to be tested
+     */
     private static void testNoFair(SingleResourceManager manager) {
         OPERATIONS.clear();
         
-        Thread a1 = new ClientThread(PriorityClass.TYPE_A, manager);
-        Thread a2 = new ClientThread(PriorityClass.TYPE_A, manager);
-        Thread b1 = new ClientThread(PriorityClass.TYPE_B, manager);
+        Thread a1 = new ClientThread(PriorityClass.PRIO_A, manager);
+        Thread a2 = new ClientThread(PriorityClass.PRIO_A, manager);
+        Thread b1 = new ClientThread(PriorityClass.PRIO_B, manager);
         
         a1.start();
         a2.start();
@@ -372,7 +434,6 @@ public class TestClass {
                 clearNetbeansConsole();
                 
                 System.out.println("Starting testing of the manager C...");
-                System.out.println("NOTICE: this manager may suffer from spurious wakeups!");
                 System.out.println("NOTICE: this might take a while...");
                 System.out.println();
                 

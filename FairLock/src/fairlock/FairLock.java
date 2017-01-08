@@ -211,6 +211,7 @@ public class FairLock {
             PrivateEventSemaphore awakeningSemaphore;
             
             synchronized(this) {
+                // Nobody to awake, go on
                 if(conditionQueue.isEmpty())
                     return;
                 
@@ -218,6 +219,7 @@ public class FairLock {
             }
             
             synchronized(FairLock.this) {
+                // The awakening thread becomes the one which holds the lock
                 setOwner(awakeningSemaphore.getOwner());
                 
                 urgentQueue.add(semaphore);
@@ -363,6 +365,7 @@ public class FairLock {
         if(!urgentQueue.isEmpty()) {
             awakeningSemaphore = urgentQueue.poll();
             
+            // The awakening thread becomes the one which holds the lock
             setOwner(awakeningSemaphore.getOwner());
             awakeningSemaphore.signal();
             
@@ -372,6 +375,7 @@ public class FairLock {
         if(!entryQueue.isEmpty()) {
             awakeningSemaphore = entryQueue.poll();
             
+            // The awakening thread becomes the one which holds the lock
             setOwner(awakeningSemaphore.getOwner());
             awakeningSemaphore.signal();
             

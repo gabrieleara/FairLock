@@ -268,7 +268,7 @@ public class FairLock {
      * Returns the owner of the lock, if any.
      * This method may be useful when extending this class.
      * 
-     * @return The thread that holds this lock, or null if the lock is unlocked
+     * @return the thread that holds this lock, or null if the lock is unlocked
      */
     protected synchronized Thread getOwner() {
         return owner;

@@ -1,4 +1,6 @@
-package fairlock;
+package manager;
+
+import fairlock.FairLock;
 
 /**
  * Implementation of the {@link SingleResourceManager} interface which uses the
@@ -6,7 +8,8 @@ package fairlock;
  * 
  * <p>As additional policy, this class ensures a total FIFO ordering between
  * requests (will anyway be given higher priority to requests of threads with
- * priority equal to {@link PriorityClass#PRIO_B}).</p>
+ * priority equal to
+ * {@link SingleResourceManager.PriorityClass#PRIO_B PriorityClass.PRIO_B}).</p>
  * 
  * @author Gabriele Ara
  */

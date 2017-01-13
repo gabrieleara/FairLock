@@ -4,12 +4,12 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 /**
- * This class implements a synchronization mechanism similar to the one provided
+ * <p>This class implements a synchronization mechanism similar to the one provided
  * by Java within the {@link java.util.concurrent} package
  * (Explicit {@link java.util.concurrent.locks.Lock Locks} and
  * {@link java.util.concurrent.locks.Condition} variables) but whose
  * behaviour is in accordance with the semantic "signal-and-urgent", as
- * described by C.A.R. Hoare. 
+ * described by Hoare.</p>
  * 
  * <p>The implementation of this class guarantees that threads waiting to
  * acquire a FairLock (either via {@link FairLock#lock()}, after
@@ -43,8 +43,7 @@ public class FairLock {
         /**
          * Initializes the event occurrance to false and sets the
          * owner of this semaphore with the value returned by
-         * <tt>{@link java.lang.Thread#currentThread() Thread.currentThread()}
-         * </tt>.
+         * {@link Thread#currentThread() Thread.currentThread()}.
          */
         public PrivateEventSemaphore() {
             hasSignal = false;
@@ -52,7 +51,7 @@ public class FairLock {
         }
         
         /**
-         * @return The owner of this semaphore
+         * @return the owner of this semaphore
          */
         protected Thread getOwner() {
             return owner;
@@ -84,7 +83,7 @@ public class FairLock {
          * Registers an occurrance of the given event and awakens the thread
          * that was waiting inside the {@link #await() await}, if any.
          * 
-         * <p>After each {@link #await() await} await is terminated, the event
+         * <p>After each {@link #await() await} is terminated, the event
          * occurrance is resetted to false; subsequent calls of this method
          * before any termination of a {@link #await() await} call will be
          * equivalent to a no operation.</p>

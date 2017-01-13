@@ -1,4 +1,4 @@
-package fairlock;
+package manager;
 
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -10,7 +10,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * 
  * <p>This implementation, for simplicity, does not guarantee FIFO ordering nor
  * fairness. In fact, the only policy implemented by this class is the "clients
- * with priority B first" one, as described in the SingleResourceManager
+ * with priority qeual to
+ * {@link SingleResourceManager.PriorityClass#PRIO_B PriorityClass.PrioB} first"
+ * one, as described in the {@link SingleResourceManager}
  * interface.</p>
  * 
  * <p>This implementation has been proved right via the LSTA tool, see file
@@ -163,15 +165,11 @@ public class SingleResourceManagerFSM implements SingleResourceManager {
         // endacquire[PrioB]
     }
     
-    /**
-     * This method simply dispatches requrests to {@link #requestA() requestA}
-     * or {@link #requestB() requestB} methods, depending the value of the
-     * argument prio.
-     * 
-     * @param prio the priority of the client that is requesting the resource
-     */
     @Override
     public void request(PriorityClass prio) {
+        // This method simply dispatches requrests to requestA or requestB
+        // methods, depending the value of the argument prio.
+        
         lock.lock();
         try {
             switch(prio) {

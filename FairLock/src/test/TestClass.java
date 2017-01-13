@@ -1,6 +1,10 @@
-package fairlock;
+package test;
 
-import fairlock.SingleResourceManager.PriorityClass;
+import manager.SingleResourceManagerFSM;
+import manager.SingleResourceManagerLock;
+import manager.SingleResourceManagerFairLock;
+import manager.SingleResourceManager;
+import manager.SingleResourceManager.PriorityClass;
 import java.awt.AWTException;
 import java.awt.Robot;
 import java.util.ArrayList;
@@ -12,8 +16,8 @@ import java.util.regex.Pattern;
 
 /**
  * Class used to test the {@link SingleResourceManager} implemnentations
- * provided in this package (and the {@link FairLock} class, in the case of the
- * corresponding Manager.
+ * provided in this package (and the {@link fairlock.FairLock} class, in the case of the
+ * corresponding Manager).
  * 
  * @author Gabriele Ara
  */
@@ -23,7 +27,7 @@ public class TestClass {
      * If the main is executed in Netbeans (c) console, this method clears the
      * screen.
      */
-    private static void clearNetbeansConsole() {
+    protected static void clearNetbeansConsole() {
         try {
             Robot pressbot = new Robot();
             pressbot.keyPress(17); // Holds CTRL key.
@@ -60,10 +64,10 @@ public class TestClass {
      * <p>At the end of the test, the user is asked if he/she wants to print the
      * trace analyzed or not.</p>
      * 
-     * @see TestClass#test(fairlock.SingleResourceManager) 
-     * @see TestClass#testNoFair(fairlock.SingleResourceManager) 
+     * @see #test(manager.SingleResourceManager)
+     * @see #testNoFair(manager.SingleResourceManager)
      */
-    public static class ClientThread extends Thread {
+    protected static class ClientThread extends Thread {
         private static long seed = System.nanoTime();
         private static int nextId = 1;
         
@@ -124,11 +128,21 @@ public class TestClass {
     private static final String PATTERN_C = "^\\s*[Cc]\\s*$";
     private static final String PATTERN_Y = "^\\s*[Yy]\\s*$";
     
-    private static void printTrace() {
+    /**
+     * Prints the full trace of events occurred during the last test execution.
+     */
+    protected static void printTrace() {
         printTrace(OPERATIONS.size());
     }
     
-    private static void printTrace(int max) {
+    /**
+     * 
+     * Prints the trace of events occurred during the last test execution, until
+     * it reaches the one with index specified by the argument max.
+     *
+     * @param max the maximum index of event that has to be printed to screen
+     */
+    protected static void printTrace(int max) {
         for(int i = 0; i < max; ++i) {
             System.out.println(OPERATIONS.get(i));
         }
@@ -136,9 +150,11 @@ public class TestClass {
     
     /**
      * Performs a test on the given manager. To do so, it creates three threads
-     * (two with a priority equal to {@link PriorityClass#PRIO_A} and one with a
-     * priority equal to {@link PriorityClass#PRIO_B}) that execute a certain
-     * amount of operations on the resource.
+     * (two with a priority equal to
+     * {@link SingleResourceManager.PriorityClass#PRIO_A PriorityClass.PRIO_A}
+     * and one with a priority equal to
+     * {@link SingleResourceManager.PriorityClass#PRIO_B PriorityClass.PRIO_B}
+     * that execute a certain amount of operations on the resource.
      * 
      * <p>If the set goes in deadlock, the testing program experiences a
      * deadlock too and trace of operations executed is not printed. To print
@@ -149,14 +165,18 @@ public class TestClass {
      * checks if the produced trace was valid, in terms of monitor consistency
      * and FIFO ordering. For a test that doesn't take into account FIFO
      * ordering of requests see
-     * {@link #testNoFair(fairlock.SingleResourceManager) testNoFair}.</p>
+     * {@link #testNoFair(manager.SingleResourceManager) testNoFair}.</p>
      * 
      * <p>At the end of the test, the user is asked if he/she wants to print the
      * trace analyzed or not.</p>
      * 
      * @param manager the manager that needs to be tested
+     * 
+     * @see #testNoFair(manager.SingleResourceManager) 
+     * @see SingleResourceManager#request(manager.SingleResourceManager.PriorityClass) 
+     * @see SingleResourceManager#release() 
      */
-    private static void test(SingleResourceManager manager) {
+    protected static void test(SingleResourceManager manager) {
         OPERATIONS.clear();
         
         Thread a1 = new ClientThread(PriorityClass.PRIO_A, manager);
@@ -269,9 +289,11 @@ public class TestClass {
     
     /**
      * Performs a test on the given manager. To do so, it creates three threads
-     * (two with a priority equal to {@link PriorityClass#PRIO_A} and one with a
-     * priority equal to {@link PriorityClass#PRIO_B}) that execute a certain
-     * amount of operations on the resource.
+     * (two with a priority equal to
+     * {@link SingleResourceManager.PriorityClass#PRIO_A PriorityClass.PRIO_A}
+     * and one with a priority equal to
+     * {@link SingleResourceManager.PriorityClass#PRIO_B PriorityClass.PRIO_B}
+     * that execute a certain amount of operations on the resource.
      * 
      * <p>If the set goes in deadlock, the testing program experiences a
      * deadlock too and trace of operations executed is not printed. To print
@@ -280,13 +302,14 @@ public class TestClass {
      * 
      * <p>If the three threads terminate each their execution, this method
      * checks if the produced trace was valid, in terms of monitor consistency
-     * only. For a test that takes into account FIFO
-     * ordering of requests too, see
-     * {@link #test(fairlock.SingleResourceManager) test}.</p>
+     * only. For a test that takes into account FIFO ordering of requests too,
+     * see {@link #test(manager.SingleResourceManager) test}.</p>
      * 
-     * @param manager the manager that needs to be tested
+     * @param manager the Manager that needs to be tested
+     * 
+     * @see #test(manager.SingleResourceManager) 
      */
-    private static void testNoFair(SingleResourceManager manager) {
+    protected static void testNoFair(SingleResourceManager manager) {
         OPERATIONS.clear();
         
         Thread a1 = new ClientThread(PriorityClass.PRIO_A, manager);
@@ -395,6 +418,12 @@ public class TestClass {
             
     }
     
+    /**
+     * Performs different tests of the {@link SingleResourceManager}
+     * implementations provided in the same package of the interface.
+     * 
+     * @param args unused
+     */
     public static void main(String[] args) {
         String input;
         boolean continue_ = true;

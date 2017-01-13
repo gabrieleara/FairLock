@@ -1,4 +1,4 @@
-package fairlock;
+package manager;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -12,7 +12,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * 
  * <p>As additional policy, this class ensures a total FIFO ordering between
  * requests (will anyway be given higher priority to requests of threads with
- * priority equal to {@link PriorityClass#PRIO_B}).</p>
+ * priority equal to
+ * {@link SingleResourceManager.PriorityClass#PRIO_B PriorityClass.PRIO_B}).</p>
  * 
  * @author Gabriele Ara
  */
@@ -94,16 +95,16 @@ public class SingleResourceManagerLock implements SingleResourceManager {
     }
     
     /**
-     * Enqueues the current thread on the Queue q and performs an await
-     * operation on the Condition variable c until the current thread becomes
-     * the owner of the resource protected by this object.
+     * Enqueues the current thread on the {@link Queue} q and performs an await
+     * operation on the {@link Condition} variable c until the current thread
+     * becomes the owner of the resource protected by this object.
      * 
      * @param c the condition variable that has to be used to await for the
      * resource
      * 
      * @param q the queue in which the current thread must be put
      */
-    private void enqueue(Condition c, Queue<Thread> q) {
+    protected void enqueue(Condition c, Queue<Thread> q) {
         q.add(Thread.currentThread());
         
         do {

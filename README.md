@@ -35,7 +35,7 @@ You can find it under the [test][5] subfolder. See Javadoc for further informati
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the MIT License - see the [LICENSE][6] file for details
 
 ## Acknowledgments
 
@@ -46,3 +46,4 @@ A great acknowledgement to professor Paolo Ancilotti, who held for us this class
 [3]:https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/Lock.html
 [4]:https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/locks/Condition.html
 [5]:https://github.com/gabrieleara/FairLock/blob/master/FairLock/src/test/
+[6]:https://github.com/gabrieleara/FairLock/blob/master/LICENSE
